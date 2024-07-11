@@ -1,0 +1,74 @@
+# Ignore cdk.out/ 
+**/cdk.out/
+
+# Ignore virtual environment directories
+**/.venv/
+
+# Ignore Python bytecode files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore IDE configuration files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Ignore operating system generated files
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+*.log
+
+# Ignore local development tool files
+coverage/
+*.cover
+*.coverage
+*.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.coveragerc
+
+# Ignore build files
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Ignore distribution packages
+*.wheel
+*.tar.gz
+*.zip
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.swp
+
+# Ignore pip generated files
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ignore tox generated files
+.tox/
+.pytest_cache/
+.cache/
+.pytype/
+
+# Ignore mypy generated files
+.mypy_cache/
+
+# Ignore Pyre generated files
+.pyre/
+
+# Ignore pytest generated files
+.pytest_cache/
+
+# Ignore Pylint generated files
+pylint-results.log
