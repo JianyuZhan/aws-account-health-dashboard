@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Role for cross-account access to Health Events
+
+Parameters:
+  DataCollectionAccountID:
+    Type: String
+    Description: "The AWS Account ID of the Data Collection Account"
+  RoleName:
+    Type: String
+    Default: "DataCollectionCrossAccountRole"
+    Description: "The name of the IAM role to be created"
+
+Resources:
+  CrossAccountRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref DataCollectionAccountID
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "HealthEventsAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "health:DescribeEvents"
+                  - "health:DescribeEventDetails"
+                  - "health:DescribeAffectedEntities"
+                Resource: "*"
