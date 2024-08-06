@@ -1,3 +1,6 @@
+# test/ url 
+tests/api_url.txt
+
 # Ignore cdk.out/ 
 **/cdk.out/
 
@@ -72,3 +75,4 @@ pip-delete-this-directory.txt
 
 # Ignore Pylint generated files
 pylint-results.log
+node_modules

@@ -1,0 +1,13 @@
+{
+    "responseModels": {
+        "OPTIONS": {
+            "statusCode": "200",
+            "responseParameters": {
+                "method.response.header.Access-Control-Allow-Origin": "'http://localhost:3000'",
+                "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE'",
+                "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            },
+            "responseModels": {}
+        }
+    }
+}

@@ -20,7 +20,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref DataCollectionAccountID
+              AWS: 
+                - !Ref DataCollectionAccountID
+                - !Sub arn:aws:iam::${DataCollectionAccountID}:role/*
             Action: "sts:AssumeRole"
       Policies:
         - PolicyName: "HealthEventsAccessPolicy"
@@ -32,4 +34,22 @@ Resources:
                   - "health:DescribeEvents"
                   - "health:DescribeEventDetails"
                   - "health:DescribeAffectedEntities"
+                Resource: "*"
+        - PolicyName: "OrganizationsAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "organizations:ListAccountsForParent"
+                  - "organizations:DescribeAccount"
+                  - "organizations:ListParents"
+                  - "organizations:ListRoots"
+                  - "organizations:ListChildren"
+                  - "organizations:ListTagsForResource"
+                  - "organizations:ListAccounts"
+                  - "organizations:DescribeOrganizationalUnit"
+                  - "organizations:ListCreateAccountStatus"
+                  - "organizations:DescribeOrganization"
+                  - "organizations:ListOrganizationalUnitsForParent"
                 Resource: "*"
