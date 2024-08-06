@@ -1,17 +1,39 @@
 import json
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.types import TypeDeserializer
 
-# 表名常量 (保持和deploy/data_collection/cdk_infr/infra_stack.py一致)
-NAME_PREFIX = 'AwsHealthDashboard'
-ACCOUNTS_TABLE_NAME = f'{NAME_PREFIX}ManagementAccounts'
-USERS_TABLE_NAME = f'{NAME_PREFIX}Users'
+# 在deploy/data_collection/cdk_infra/backend_stack.py中把common/打包为
+# Lambda Layer, 导致最终的layer是没有common/这一层目录. 所以，使用
+# try...except... 这种技巧
+try:
+    # 本地开发时使用
+    from common.utils import create_response, parse_event
+    from common.constants import ACCOUNTS_TABLE_NAME, USERS_TABLE_NAME
+except ImportError:
+    # 部署到 Lambda 时使用
+    from utils import create_response, parse_event
+    from constants import ACCOUNTS_TABLE_NAME, USERS_TABLE_NAME
+
 
 # 初始化DynamoDB客户端
 dynamodb = boto3.resource('dynamodb')
 dynamodb_client = boto3.client('dynamodb')
 accounts_table = dynamodb.Table(ACCOUNTS_TABLE_NAME)
 users_table = dynamodb.Table(USERS_TABLE_NAME)
+
+deserializer = TypeDeserializer()
+
+def deserialize_item(item):
+    """
+    反序列化DynamoDB项目
+
+    参数:
+    item (dict): 原始DynamoDB项目
+
+    返回:
+    dict: 反序列化后的项目
+    """
+    return {k: deserializer.deserialize(v) for k, v in item.items()}
 
 def get_accounts(account_ids):
     """
@@ -23,7 +45,7 @@ def get_accounts(account_ids):
     返回:
     dict: 账户信息字典，键为账户ID，值为账户详情
     """
-    keys = [{'account_id': {'S': account_id}} for account_id in account_ids]
+    keys = [{'AccountId': {'S': account_id}} for account_id in account_ids]
     response = dynamodb_client.batch_get_item(
         RequestItems={
             ACCOUNTS_TABLE_NAME: {
@@ -31,7 +53,8 @@ def get_accounts(account_ids):
             }
         }
     )
-    return {item['account_id']['S']: item for item in response['Responses'][ACCOUNTS_TABLE_NAME]}
+    print("Batch get item response:", response)
+    return {deserialize_item(item)['AccountId']: deserialize_item(item) for item in response['Responses'][ACCOUNTS_TABLE_NAME]}
 
 def prepare_transact_items(account_ids, existing_accounts):
     """
@@ -45,33 +68,45 @@ def prepare_transact_items(account_ids, existing_accounts):
     list: 事务写入项列表
     """
     transact_items = []
+    user_updates = {}
 
     for account_id in account_ids:
         if account_id in existing_accounts:
-            allowed_users = existing_accounts[account_id].get('allowed_users', {}).keys()
+            allowed_users = list(existing_accounts[account_id]['AllowedUsers'].keys())
+            print(f"Allowed users for account {account_id}: {allowed_users}")
 
             # 删除管理账户表中的记录
             transact_items.append({
                 'Delete': {
                     'TableName': ACCOUNTS_TABLE_NAME,
-                    'Key': {'account_id': {'S': account_id}}
+                    'Key': {'AccountId': {'S': account_id}}
                 }
             })
 
-            # 更新用户表
+            # 合并对用户表的更新操作
             for email in allowed_users:
-                transact_items.append({
-                    'Update': {
-                        'TableName': USERS_TABLE_NAME,
-                        'Key': {'user_id': {'S': email}},
-                        'UpdateExpression': 'DELETE allowed_accounts :account_id',
-                        'ExpressionAttributeValues': {':account_id': {'SS': [account_id]}}
-                    }
-                })
+                if email not in user_updates:
+                    user_updates[email] = set()
+                user_updates[email].add(account_id)
         else:
             print(f"Account ID {account_id} not found.")
-            return create_response(404, f'Account ID {account_id} not found.')
+            # 不再返回错误响应，返回空列表
+            return []
 
+    print(f"user_updates: {user_updates}")
+
+    for email, account_id_set in user_updates.items():
+        print(f"Preparing to update {email} to delete account IDs {list(account_id_set)}")
+        transact_items.append({
+            'Update': {
+                'TableName': USERS_TABLE_NAME,
+                'Key': {'UserId': {'S': email}},
+                'UpdateExpression': 'DELETE AllowedAccountIds :account_ids',
+                'ExpressionAttributeValues': {':account_ids': {'SS': list(account_id_set)}}
+            }
+        })
+
+    print("Prepared transaction items:", transact_items)
     return transact_items
 
 def execute_transact_items(transact_items):
@@ -91,22 +126,6 @@ def execute_transact_items(transact_items):
         print(f"Failed to delete data: {e}")
         return create_response(500, 'Failed to delete data due to an internal error.')
 
-def create_response(status_code, message):
-    """
-    创建API响应。
-
-    参数:
-    status_code (int): HTTP状态码
-    message (str): 响应消息
-
-    返回:
-    dict: 包含状态码和消息的字典
-    """
-    return {
-        'statusCode': status_code,
-        'body': json.dumps(message)
-    }
-
 def lambda_handler(event, context):
     """
     批量注销DynamoDB中账户信息的Lambda函数。
@@ -123,6 +142,10 @@ def lambda_handler(event, context):
     返回:
     dict: 包含状态码和处理结果的字典
     """
+    # 解析事件
+    event = parse_event(event)
+    print("Parsed event:", json.dumps(event, indent=2))
+
     account_ids = event.get('account_ids')
 
     if not account_ids or not all(acc_id.isdigit() and len(acc_id) == 12 for acc_id in account_ids):
@@ -130,5 +153,8 @@ def lambda_handler(event, context):
 
     existing_accounts = get_accounts(account_ids)
     transact_items = prepare_transact_items(account_ids, existing_accounts)
+
+    if not transact_items:  # 如果事务项为空，返回找不到账户ID的响应
+        return create_response(404, 'One or more Account IDs not found.')
 
     return execute_transact_items(transact_items)

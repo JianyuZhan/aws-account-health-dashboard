@@ -3,15 +3,23 @@ import boto3
 import re
 from boto3.dynamodb.conditions import Key
 
-# 表名常量 (保持和deploy/data_collection/cdk_infr/infra_stack.py一致)
-NAME_PREFIX = 'AwsHealthDashboard'
-ACCOUNTS_TABLE_NAME = f'{NAME_PREFIX}ManagementAccounts'
-USERS_TABLE_NAME = f'{NAME_PREFIX}Users'
+# 在deploy/data_collection/cdk_infra/backend_stack.py中把common/打包为
+# Lambda Layer, 导致最终的layer是没有common/这一层目录. 所以，使用
+# try...except... 这种技巧
+try:
+    # 本地开发时使用
+    from common.utils import create_response, parse_event
+    from common.constants import ACCOUNTS_TABLE_NAME, USERS_TABLE_NAME
+except ImportError:
+    # 部署到 Lambda 时使用
+    from utils import create_response, parse_event
+    from constants import ACCOUNTS_TABLE_NAME, USERS_TABLE_NAME
 
 # 初始化DynamoDB客户端
-dynamodb = boto3.resource('dynamodb')
-accounts_table = dynamodb.Table(ACCOUNTS_TABLE_NAME)
-users_table = dynamodb.Table(USERS_TABLE_NAME)
+dynamodb_resource = boto3.resource('dynamodb')
+dynamodb_client = boto3.client('dynamodb')
+accounts_table = dynamodb_resource.Table(ACCOUNTS_TABLE_NAME)
+users_table = dynamodb_resource.Table(USERS_TABLE_NAME)
 
 # 邮箱格式校验的正则表达式
 email_regex = re.compile(r"[^@]+@[^@]+\.[^@]+")
@@ -38,158 +46,155 @@ def get_account(account_id):
     返回:
     dict: 账户信息
     """
-    response = accounts_table.get_item(
-        Key={
-            'account_id': account_id
-        }
-    )
+    response = accounts_table.get_item(Key={'AccountId': account_id})
     return response.get('Item')
 
-def prepare_transact_items(account_id, existing_emails, params):
+def get_user(user_id):
     """
-    准备DynamoDB的事务写入项。
+    从DynamoDB中获取用户信息。
+
+    参数:
+    user_id (str): 用户ID
+
+    返回:
+    dict: 用户信息
+    """
+    response = users_table.get_item(Key={'UserId': user_id})
+    return response.get('Item')
+
+def create_user_update_transaction(user_id, account_id, action, username=None):
+    """
+    创建用户更新事务项目。
+
+    参数:
+    user_id (str): 用户ID
+    account_id (str): 账户ID
+    action (str): 操作类型 ("add", "delete", "update")
+    username (str): 用户名 (可选)
+
+    返回:
+    dict: 更新事务项目
+    """
+    if action == 'add':
+        update_expression = "ADD AllowedAccountIds :account_id SET UserName = if_not_exists(UserName, :user_name)"
+        expression_attribute_values = {':account_id': {'SS': [account_id]}, ':user_name': {'S': username}}
+    elif action == 'delete':
+        update_expression = "DELETE AllowedAccountIds :account_id"
+        expression_attribute_values = {':account_id': {'SS': [account_id]}}
+    else:
+        update_expression = "SET AllowedAccountIds = :account_id, UserName = :user_name"
+        expression_attribute_values = {':account_id': {'SS': [account_id]}, ':user_name': {'S': username}}
+
+    return {
+        'Update': {
+            'TableName': USERS_TABLE_NAME,
+            'Key': {'UserId': {'S': user_id}},
+            'UpdateExpression': update_expression,
+            'ExpressionAttributeValues': expression_attribute_values,
+        }
+    }
+
+def handle_user_updates(user_ids, account_id, add_users, delete_users, update_users):
+    """
+    处理用户更新，生成事务项目。
+
+    参数:
+    user_ids (set): 用户ID集合
+    account_id (str): 账户ID
+    add_users (dict): 添加的用户字典
+    delete_users (dict): 删除的用户字典
+    update_users (dict): 更新的用户字典
+
+    返回:
+    list: 事务项目列表
+    """
+    transactions = []
+    for user_id in user_ids:
+        user = get_user(user_id)
+        if not user:
+            if user_id in delete_users:
+                print(f"User {user_id} not found, skipping delete.")
+                continue  # 如果是删除操作且用户不存在，跳过
+            print(f"User {user_id} not found, creating new entry.")
+
+        if user_id in add_users:
+            transactions.append(create_user_update_transaction(user_id, account_id, 'add', add_users[user_id]))
+        elif user_id in delete_users:
+            transactions.append(create_user_update_transaction(user_id, account_id, 'delete'))
+        elif user_id in update_users:
+            transactions.append(create_user_update_transaction(user_id, account_id, 'update', update_users[user_id]))
+
+    return transactions
+
+def update_account_users(account_id, users):
+    """
+    更新账户的AllowedUsers。
 
     参数:
     account_id (str): 账户ID
-    existing_emails (dict): 现有的邮箱信息
-    params (dict): 包含添加、删除和更新操作的参数
+    users (dict): 更新后的用户字典
 
     返回:
-    list: 事务写入项列表
+    dict: 更新事务项目
     """
-    transact_items = []
+    if users:
+        expression_attribute_values = {':val': {'M': {k: {'S': v} for k, v in users.items()}}}
+    else:
+        expression_attribute_values = {':val': {'M': {}}}
+    
+    print(f"Updating AllowedUsers for account {account_id} with: {expression_attribute_values}")
 
-    if 'add' in params:
-        add_emails(existing_emails, params['add'], transact_items, account_id)
-
-    if 'delete' in params:
-        delete_emails(existing_emails, params['delete'], transact_items, account_id)
-
-    if 'update' in params:
-        update_emails(existing_emails, params['update'])
-
-    # 更新管理账户表
-    transact_items.append({
+    return {
         'Update': {
             'TableName': ACCOUNTS_TABLE_NAME,
-            'Key': {'account_id': {'S': account_id}},
-            'UpdateExpression': 'SET allowed_users = :emails',
-            'ExpressionAttributeValues': {
-                ':emails': {'M': {email: {'S': name} for email, name in existing_emails.items()}}
-            }
+            'Key': {'AccountId': {'S': account_id}},
+            'UpdateExpression': 'SET AllowedUsers = :val',
+            'ExpressionAttributeValues': expression_attribute_values,
         }
-    })
-
-    return transact_items
-
-def add_emails(existing_emails, emails_to_add, transact_items, account_id):
-    """
-    向现有邮箱字典中添加新邮箱，并准备事务项。
-
-    参数:
-    existing_emails (dict): 现有的邮箱信息字典
-    emails_to_add (dict): 需要添加的邮箱信息字典
-    transact_items (list): 事务项列表
-    account_id (str): 账户ID
-    """
-    for email, name in emails_to_add.items():
-        if validate_email(email):
-            if email not in existing_emails:
-                existing_emails[email] = name
-                print(f"Added email: {email}")
-                # 更新用户表
-                transact_items.append({
-                    'Update': {
-                        'TableName': USERS_TABLE_NAME,
-                        'Key': {'user_id': {'S': email}},
-                        'UpdateExpression': 'ADD allowed_accounts :account_id SET user_name = if_not_exists(user_name, :user_name)',
-                        'ExpressionAttributeValues': {
-                            ':account_id': {'SS': [account_id]},
-                            ':user_name': {'S': name}
-                        }
-                    }
-                })
-            else:
-                print(f"Email already exists, not adding: {email}")
-        else:
-            print(f"Invalid email format: {email}")
-
-def delete_emails(existing_emails, emails_to_delete, transact_items, account_id):
-    """
-    从现有邮箱字典中删除指定的邮箱，并准备事务项。
-
-    参数:
-    existing_emails (dict): 现有的邮箱信息字典
-    emails_to_delete (dict): 需要删除的邮箱信息字典
-    transact_items (list): 事务项列表
-    account_id (str): 账户ID
-    """
-    for email in emails_to_delete:
-        if email in existing_emails:
-            del existing_emails[email]
-            print(f"Deleted email: {email}")
-            # 更新用户表
-            transact_items.append({
-                'Update': {
-                    'TableName': USERS_TABLE_NAME,
-                    'Key': {'user_id': {'S': email}},
-                    'UpdateExpression': 'DELETE allowed_accounts :account_id',
-                    'ExpressionAttributeValues': {':account_id': {'SS': [account_id]}}
-                }
-            })
-        else:
-            print(f"Email not found, not deleting: {email}")
-
-def update_emails(existing_emails, emails_to_update):
-    """
-    更新现有邮箱字典中的邮箱对应的名字。
-
-    参数:
-    existing_emails (dict): 现有的邮箱信息字典
-    emails_to_update (dict): 需要更新的邮箱信息字典
-    """
-    for email, name in emails_to_update.items():
-        if validate_email(email):
-            if email in existing_emails:
-                existing_emails[email] = name
-                print(f"Updated email: {email}")
-            else:
-                print(f"Email not found, cannot update: {email}")
-        else:
-            print(f"Invalid email format: {email}")
-
-def execute_transact_items(transact_items):
-    """
-    执行DynamoDB事务写入操作。
-
-    参数:
-    transact_items (list): 事务写入项列表
-
-    返回:
-    dict: 包含状态码和处理结果的字典
-    """
-    try:
-        dynamodb.meta.client.transact_write_items(TransactItems=transact_items)
-        return create_response(200, 'Account updated successfully.')
-    except Exception as e:
-        print(f"Failed to store data: {e}")
-        return create_response(500, 'Failed to store data due to an internal error.')
-
-def create_response(status_code, message):
-    """
-    创建API响应。
-
-    参数:
-    status_code (int): HTTP状态码
-    message (str): 响应消息
-
-    返回:
-    dict: 包含状态码和消息的字典
-    """
-    return {
-        'statusCode': status_code,
-        'body': json.dumps(message)
     }
+
+def handle_account_update(account_id, existing_account, params):
+    """
+    处理账户更新，生成事务项目。
+
+    参数:
+    account_id (str): 账户ID
+    existing_account (dict): 表中的accout_id对应的对象
+    params (dict): 更新参数，包含add, delete, update字典
+
+    返回:
+    list: 事务项目列表
+    """
+    existing_users = existing_account.get('AllowedUsers', {})
+    print(f"Existing AllowedUsers: {existing_users}")
+
+    add_users = params.get('add', {})
+    delete_users = params.get('delete', {})
+    update_users = params.get('update', {})
+
+    user_ids = set(add_users.keys()).union(delete_users.keys()).union(update_users.keys())
+    if len(user_ids) != len(add_users) + len(delete_users) + len(update_users):
+        return create_response(400, "A user can't be in add/update/delete at the same time.")
+
+    for user_id, username in add_users.items():
+        if user_id in existing_users:
+            print(f"User {user_id} already exists in AllowedUsers, skipping add.")
+            continue
+        existing_users[user_id] = username
+
+    for user_id in delete_users.keys():
+        if user_id not in existing_users:
+            print(f"User {user_id} not found in AllowedUsers, skipping delete.")
+            continue
+        del existing_users[user_id]
+
+    for user_id, username in update_users.items():
+        existing_users[user_id] = username
+
+    account_update_transaction = update_account_users(account_id, existing_users)
+    user_update_transactions = handle_user_updates(user_ids, account_id, add_users, delete_users, update_users)
+    
+    return [account_update_transaction] + user_update_transactions
 
 def lambda_handler(event, context):
     """
@@ -212,10 +217,15 @@ def lambda_handler(event, context):
     返回:
     dict: 包含状态码和处理结果的字典
     """
+    # 解析事件
+    event = parse_event(event)
+    print("Parsed event:", json.dumps(event, indent=2))
+
     account_id = event.get('account_id')
     params = event.get('params', {})
 
     if not account_id or not account_id.isdigit() or len(account_id) != 12:
+        print(f"Invalid account ID format: {account_id}")
         return create_response(400, 'Invalid account ID format.')
 
     existing_account = get_account(account_id)
@@ -223,8 +233,19 @@ def lambda_handler(event, context):
         print(f"Account ID {account_id} not found.")
         return create_response(404, f'Account ID {account_id} not found.')
 
-    existing_emails = existing_account.get('allowed_users', {})
+    transactions = handle_account_update(account_id, existing_account, params)
+    if isinstance(transactions, dict):  # 检查是否返回错误响应
+        return transactions
+    
+    if transactions:
+        try:
+            for i in range(0, len(transactions), 25):  # DynamoDB事务写入每次最多处理25个项目
+                batch = transactions[i:i+25]
+                print(f"Processing batch: {json.dumps(batch, indent=2)}")
+                response = dynamodb_client.transact_write_items(TransactItems=batch)
+                print(f"Batch of {len(batch)} items stored successfully. Response: {response}")
+        except Exception as e:
+            print(f"Transaction failed: {e}")
+            return create_response(500, 'Failed to update account and user information.')
 
-    transact_items = prepare_transact_items(account_id, existing_emails, params)
-
-    return execute_transact_items(transact_items)
+    return create_response(200, 'Account and user information updated successfully.')

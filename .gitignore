@@ -1,5 +1,10 @@
+api_tests/api_url.txt
+
 # Ignore cdk.out/ 
 **/cdk.out/
+
+# Ingore frontend .env
+frontend/.env
 
 # Ignore virtual environment directories
 **/.venv/
@@ -72,3 +77,4 @@ pip-delete-this-directory.txt
 
 # Ignore Pylint generated files
 pylint-results.log
+node_modules
