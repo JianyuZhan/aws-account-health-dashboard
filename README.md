@@ -2,11 +2,11 @@
 
 这是一个跨帐号管理其它 AWS 组织帐号健康事件的管理平台，它提供了相关的 API 接口以及简洁的 UI 实现。通过本项目，可以轻松管理多个组织帐号下的所有授权帐号的 AWS 健康事件，并提供一个(可选安装的)整合管理界面对所有事件进行可视化及操作。
 
-
 ## 目录
 
 1. [部署指南](#部署指南)
    - [前置要求](#前置要求)
+   - [设置环境变量](#设置环境变量)
    - [组织帐号端](#组织帐号端)
    - [数据收集端](#数据收集端)
      - [后端基础设施](#后端基础设施)
@@ -44,12 +44,21 @@ aws organizations enable-aws-service-access --service-principal health.amazonaws
 
 建议在运行这个命令前，先获取成员帐户的许可。
 
+### 设置环境变量
+
+在部署之前，确保设置本项目要部署的 AWS 区域的环境变量。
+
+```bash
+export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
+```
+
+如果未设置 `AWS_HEALTH_DASHBOARD_REGION`，将使用 `AWS_REGION` 作为备选。
 
 ### 组织帐号端
 
 需要部署本项目的 AWS 帐号记为：`AWS_DATA_COLLECTION_ACCOUNT`。
 
-1. 在**每个**组织的管理帐号中，运行 `deploy/management_accounts/create_cross_role.sh` 脚本。
+1. 在**每个**组织的管理帐号中，运行 `deploy/management_accounts/create_cross_role.py` 脚本。
    - 该脚本将创建允许 `AWS_DATA_COLLECTION_ACCOUNT` 拉取相关组织及其成员健康事件的 IAM 角色及权限。
    - 请参考 `deploy/management_accounts/README.md` 了解详细用法。
    - 记下每个管理帐号及其对应创建的 IAM 角色信息。

@@ -5,16 +5,19 @@ Parameters:
   DataCollectionAccountID:
     Type: String
     Description: "The AWS Account ID of the Data Collection Account"
-  RoleName:
+  ManagementAccountRoleName:
     Type: String
     Default: "DataCollectionCrossAccountRole"
-    Description: "The name of the IAM role to be created"
+    Description: "The name of the IAM role to be created for the management account"
+  DataCollectionLambdaRoleArn:
+    Type: String
+    Description: "The ARN of the IAM role for Lambda in the data collection account"
 
 Resources:
   CrossAccountRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Ref RoleName
+      RoleName: !Ref ManagementAccountRoleName
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -22,7 +25,7 @@ Resources:
             Principal:
               AWS: 
                 - !Ref DataCollectionAccountID
-                - !Sub arn:aws:iam::${DataCollectionAccountID}:role/*
+                - !Ref DataCollectionLambdaRoleArn  # 这里引用完整的 ARN
             Action: "sts:AssumeRole"
       Policies:
         - PolicyName: "HealthEventsAccessPolicy"
