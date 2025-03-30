@@ -31,34 +31,24 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 示例区域
 
 ### 3. 执行脚本创建 IAM 角色
 
-运行 Python 脚本来创建 CloudFormation 栈。你可以传入 `stack-name` 和 `role-name` 参数，也可以使用默认值。
+运行 Python 脚本来创建 CloudFormation 栈。
 
-#### 示例 1：使用默认值
-
-如果不传入 `stack-name` 和 `role-name` 参数，脚本将使用默认值 `AwsHealthCrossAccountRoleStack` 和 `DataCollectionCrossAccountRole`。
+#### 示例 1：基本用法
 
 ```bash
 python create_cross_account_role.py <data-collection-account-id>
 ```
 
-#### 示例 2：指定 `stack-name`
-
-如果需要指定 `stack-name`，可以传入 `--stack-name` 参数：
+#### 示例 2：指定区域和角色名
 
 ```bash
-python create_cross_account_role.py <data-collection-account-id> --stack-name <stack-name>
-```
-
-#### 示例 3：指定 `stack-name` 和 `role-name`
-
-如果需要指定 `stack-name` 和 `role-name`，可以传入 `--stack-name` 和 `--role-name` 参数：
-
-```bash
-python create_cross_account_role.py <data-collection-account-id> --stack-name <stack-name> --role-name <role-name>
+python create_cross_account_role.py <data-collection-account-id> --region us-west-2 --role-name CustomRoleName
 ```
 
 ### 参数说明
 
-- `<data-collection-account-id>`: 数据收集账户的 AWS 账户 ID。
-- `--stack-name` (可选): CloudFormation 栈的名称。如果未指定，将使用默认值 `AwsHealthCrossAccountRoleStack`。
-- `--role-name` (可选): 创建的 IAM 角色的名称。如果未指定，将使用默认值 `DataCollectionCrossAccountRole`。
+- `<data-collection-account-id>`: 数据收集账户的 AWS 账户 ID（必填）
+- `--region`: 指定 AWS 区域（可选，默认使用环境变量）
+- `--stack-name`: CloudFormation 栈名称（可选，默认为区域前缀+AwsHealthCrossAccountRoleStack）
+- `--role-name`: IAM 角色名称（可选，默认为区域前缀+DataCollectionCrossAccountRole）
+- `--validate-only`: 仅验证模板，不创建栈（可选）

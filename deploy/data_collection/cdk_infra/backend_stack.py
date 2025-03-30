@@ -251,6 +251,38 @@ class AwsHealthDashboard(Stack):
             )
         )
 
+        # 添加 AWS Health API 操作权限
+        role.add_to_policy(iam.PolicyStatement(
+            sid="HealthEventsAccessPolicy",
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "health:DescribeEvents",
+                "health:DescribeEventDetails",
+                "health:DescribeAffectedEntities"
+            ],
+            resources=["*"]
+        ))
+
+        # 添加 AWS Organizations 操作权限
+        role.add_to_policy(iam.PolicyStatement(
+            sid="OrganizationsAccessPolicy",
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "organizations:ListAccountsForParent",
+                "organizations:DescribeAccount",
+                "organizations:ListParents",
+                "organizations:ListRoots",
+                "organizations:ListChildren",
+                "organizations:ListTagsForResource",
+                "organizations:ListAccounts",
+                "organizations:DescribeOrganizationalUnit",
+                "organizations:ListCreateAccountStatus",
+                "organizations:DescribeOrganization",
+                "organizations:ListOrganizationalUnitsForParent"
+            ],
+            resources=["*"]
+        ))
+
         self.accounts_table.grant_read_write_data(role)
         self.user_table.grant_read_write_data(role)
         self.health_table.grant_read_write_data(role)
