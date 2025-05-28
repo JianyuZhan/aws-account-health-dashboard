@@ -107,26 +107,36 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
        npm install -g aws-cdk
        ```
 
-2. **安装 Python 依赖**：
-   - 进入 `deploy/data_collection` 目录，安装所需的 Python 依赖：
+2. **设置 Python 虚拟环境**：
+   - 创建并激活 Python 虚拟环境：
      ```bash
      cd deploy/data_collection
+     python -m venv .venv
+     # Windows 下激活虚拟环境
+     .venv\Scripts\activate
+     # Linux/Mac 下激活虚拟环境
+     source .venv/bin/activate
+     ```
+
+3. **安装 Python 依赖**：
+   - 在虚拟环境中安装所需的 Python 依赖：
+     ```bash
      pip install -r requirements.txt
      ```
 
-3. **配置 AWS 凭证**：
+4. **配置 AWS 凭证**：
    - 确保已配置好 AWS 凭证，并且使用的是 `AWS_DATA_COLLECTION_ACCOUNT` 的凭证：
      ```bash
      aws configure
      ```
 
-4. **设置环境变量**:
+5. **设置环境变量**:
    ```bash
    export DEPLOY_ENVIRONMENT='dev' # 开发用'dev', 正式部署用'prod'
    export AWS_HEALTH_DASHBOARD_REGION=us-east-1 # 设置目标部署区域
    ```
 
-5. **引导 CDK 环境**：
+6. **引导 CDK 环境**：
    - 第一次使用 CDK 部署到指定区域时，需要先引导 CDK 环境：
      ```bash
      cdk bootstrap aws://<account-id>/<region>
@@ -142,16 +152,16 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
      cdk bootstrap --region us-east-1
      ```
 
-6. **构建并推送 UI Docker 镜像（可选）**：
+7. **构建并推送 UI Docker 镜像（可选）**：
    - **如果不需要部署前端，可以直接跳过此步骤**。
-   - 进入 `deploy/frontend` 目录，运行以下命令构建并推送前端的 Docker 镜像到 ECR：
+   - 进入 `frontend` 目录，运行以下命令构建并推送前端的 Docker 镜像到 ECR：
      ```bash
-     cd deploy/frontend
+     cd frontend
      ./build_and_push.sh <region> <tag>
      ```
      注意：`<region>` 是 AWS 区域（例如 `us-east-1`），`<tag>` 是镜像的标签，默认为 `latest`。
 
-7. **部署基础设施**：
+8. **部署基础设施**：
    - 在 `deploy/data_collection` 目录下运行以下命令来部署 CDK 堆栈：
      ```bash
      cdk deploy --all
@@ -162,10 +172,10 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
      cdk deploy --all --region us-east-1
      ```
 
-8. **记录 API 端点**：
+9. **记录 API 端点**：
    - 部署完成后，CDK 的输出将包含一个类似于 `https://su8suqixml.execute-api.<region>.amazonaws.com/prod/` 的值，记为 `AwsHealthDashboardApiEndpoint`。将其记录下来，记为 `API_ENDPOINT`。
 
-9. **前端应用的 URL**：
+10. **前端应用的 URL**：
    - 如果前端已部署成功，CDK 的输出还将包含前端应用的 URL，如下所示：
    ```
    FrontendStack.FrontendURL = http://<your-environment-name>.<your-region>.elb.amazonaws.com

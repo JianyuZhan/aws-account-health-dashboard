@@ -8,7 +8,8 @@ import AfterRegister from './components/account/AfterRegister';
 import HealthEventsDashboard from './components/health_event_dashboard/HealthEventsDashboard'; 
 
 const App = () => {
-  const API_ENDPOINT = '/api';
+  const config = require('./config');
+  const API_ENDPOINT = config.API_ENDPOINT;
 
   return (
     <Router>
