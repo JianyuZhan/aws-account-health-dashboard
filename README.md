@@ -110,7 +110,7 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
 2. **设置 Python 虚拟环境**：
    - 创建并激活 Python 虚拟环境：
      ```bash
-     cd deploy/data_collection
+     cd <project_root>/deploy/data_collection
      python -m venv .venv
      # Windows 下激活虚拟环境
      .venv\Scripts\activate
@@ -154,15 +154,15 @@ export AWS_HEALTH_DASHBOARD_REGION=us-east-1  # 替换为你的目标区域
 
 7. **构建并推送 UI Docker 镜像（可选）**：
    - **如果不需要部署前端，可以直接跳过此步骤**。
-   - 进入 `frontend` 目录，运行以下命令构建并推送前端的 Docker 镜像到 ECR：
+   - 进入 `<project_root>/frontend` 目录，运行以下命令构建并推送前端的 Docker 镜像到 ECR：
      ```bash
-     cd frontend
+     cd <project_root>/frontend
      ./build_and_push.sh <region> <tag>
      ```
      注意：`<region>` 是 AWS 区域（例如 `us-east-1`），`<tag>` 是镜像的标签，默认为 `latest`。
 
 8. **部署基础设施**：
-   - 在 `deploy/data_collection` 目录下运行以下命令来部署 CDK 堆栈：
+   - 在 `<project_root>/deploy/data_collection` 目录下运行以下命令来部署 CDK 堆栈：
      ```bash
      cdk deploy --all
      ```

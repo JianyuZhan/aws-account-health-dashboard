@@ -27,10 +27,10 @@ aws configure
 
 ### 创建和激活 Python 虚拟环境
 
-在 `deploy` 目录下：
+在 `<project_root>/deploy/data_collection` 目录下：
 
 ```sh
-cd deploy/data_collection
+cd <project_root>/deploy/data_collection
 python -m venv .venv
 source .venv/bin/activate  # Windows 使用 `.venv\Scripts\activate`
 ```
